@@ -9,7 +9,7 @@ type HubScreenProps = {
 const HubScreen = ({ onCreateWallet, onImportWallet }: HubScreenProps) => (
   <div className='mx-auto flex w-full max-w-5xl flex-col items-center gap-10 text-center'>
     <IconBubble
-      symbol='👛'
+      symbol='💰'
       size='h-28 w-28'
       accent='from-indigo-600 to-blue-500'
     />

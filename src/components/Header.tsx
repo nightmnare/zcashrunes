@@ -41,7 +41,7 @@ const Header = () => {
     <>
       <header className='mx-auto flex w-full max-w-6xl items-center justify-between gap-2 rounded-2xl border border-slate-800/80 bg-slate-950/80 px-3 py-2 shadow-lg shadow-slate-900/40 md:gap-4 md:rounded-3xl md:px-6 md:py-4'>
         <Link to='/' className='text-xl font-semibold tracking-wide text-white'>
-          Z-NFTS
+          Zrunes.com
         </Link>
         {/* Desktop Navigation */}
         <nav className='hidden items-center gap-3 md:flex'>
@@ -104,7 +104,7 @@ const Header = () => {
               onClick={() => setSidebarOpen(false)}
               className='text-xl font-semibold tracking-wide text-white'
             >
-              Z-NFTS
+              Zrunes.com
             </Link>
             <button
               type='button'
