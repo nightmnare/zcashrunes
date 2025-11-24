@@ -156,7 +156,7 @@ const Header = () => {
               onClick={() => handleNavClick('/wallet')}
               className={mobileLinkClasses('/wallet')}
             >
-              👛 Wallet
+              💰 Wallet
             </button>
           </nav>
         </div>

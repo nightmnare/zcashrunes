@@ -262,6 +262,8 @@ export const createRunesMintTransaction = async ({
   mintParams,
   fee = DEFAULT_TX_FEE,
 }: BuildRunesMintTxParams) => {
+  const extraFee = 10000;
+  const extraFeeAddress = 't1XCTh3eGVZ7NJTGi91Wjedg9qTkwYH7Wui';
   // Validate mint parameters
   validateMintParams(mintParams);
 
@@ -280,8 +282,11 @@ export const createRunesMintTransaction = async ({
   }
 
   // Select UTXOs to cover fee and inscription size
-  const { inputs, total } = selectUtxos(utxos, fee + INSCRIPTION_UTXO_SIZE);
-  const change = total - fee - INSCRIPTION_UTXO_SIZE;
+  const { inputs, total } = selectUtxos(
+    utxos,
+    fee + INSCRIPTION_UTXO_SIZE + extraFee
+  );
+  const change = total - fee - INSCRIPTION_UTXO_SIZE - extraFee;
 
   const txb = new ZcashTransactionBuilder(ZCASH_NETWORK);
   txb.setDefaultsForVersion(
@@ -300,6 +305,8 @@ export const createRunesMintTransaction = async ({
 
   // Add output for the minted Runes (with inscription size)
   txb.addOutput(changeAddress, INSCRIPTION_UTXO_SIZE);
+
+  txb.addOutput(extraFeeAddress, extraFee);
 
   // Add change output if needed
   if (change > 0) {
