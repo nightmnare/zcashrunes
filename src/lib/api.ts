@@ -91,8 +91,7 @@ export type SendTransactionResponse = {
 };
 
 const API_BASE_URL =
-  import.meta.env.VITE_API_BASE_URL ?? 'https://zcash.api.ordinalpixels.art';
-
+  import.meta.env.VITE_API_BASE_URL ?? 'https://zrunesbackend.vercel.app/';
 const handleResponse = async <T>(response: Response): Promise<T> => {
   if (!response.ok) {
     const message = await response.text();
