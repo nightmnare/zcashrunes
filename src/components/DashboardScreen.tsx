@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { toast } from 'react-hot-toast';
 import ActionIconButton from './ActionIconButton';
 import IconBubble from './IconBubble';
@@ -91,12 +91,47 @@ const DashboardScreen = ({
 
   // Tabs state
   const [activeTab, setActiveTab] = useState<'nft' | 'rune'>('nft');
-  const [runeView, setRuneView] = useState<'etch' | 'mint'>('etch');
+  const [runeView, setRuneView] = useState<'etch' | 'mint' | 'balance'>('balance');
 
   // Runes state
   const [runes, setRunes] = useState<RuneEtchDto[]>([]);
   const [runeMints, setRuneMints] = useState<RuneMintDto[]>([]);
   const [loadingRunes, setLoadingRunes] = useState(false);
+
+  // Calculate rune balances by aggregating mints by runeId
+  const runeBalances = useMemo(() => {
+    const balanceMap = new Map<
+      string,
+      { runeId: string; runeName: string; totalAmount: bigint; decimals: number }
+    >();
+
+    runeMints.forEach((mint) => {
+      if (!mint.runeId) return;
+
+      const existing = balanceMap.get(mint.runeId);
+      const amount = BigInt(mint.amount || '0');
+
+      if (existing) {
+        existing.totalAmount += amount;
+      } else {
+        // Try to find decimals from etch record
+        const etchRecord = runes.find((r) => r.runeId === mint.runeId);
+        balanceMap.set(mint.runeId, {
+          runeId: mint.runeId,
+          runeName: mint.runeName || 'Unknown',
+          totalAmount: amount,
+          decimals: parseInt(etchRecord?.runeDecimals || '0', 10),
+        });
+      }
+    });
+
+    return Array.from(balanceMap.values()).sort((a, b) => {
+      // Sort by rune name, then by runeId
+      const nameCompare = a.runeName.localeCompare(b.runeName);
+      if (nameCompare !== 0) return nameCompare;
+      return a.runeId.localeCompare(b.runeId);
+    });
+  }, [runeMints, runes]);
 
   const getIpfsUrl = (cid: string) => {
     return `https://ipfs.io/ipfs/${cid}`;
@@ -111,13 +146,13 @@ const DashboardScreen = ({
     if (activeTab !== 'rune') return;
     setLoadingRunes(true);
     try {
-      if (runeView === 'etch') {
-        const runesData = await getRunesByAddress(address);
-        setRunes(runesData);
-      } else {
-        const mintsData = await getRuneMintsByAddress(address);
-        setRuneMints(mintsData);
-      }
+      // Always load both etch and mint data for balance calculation
+      const [runesData, mintsData] = await Promise.all([
+        getRunesByAddress(address),
+        getRuneMintsByAddress(address),
+      ]);
+      setRunes(runesData);
+      setRuneMints(mintsData);
     } catch (error) {
       console.error('Failed to load runes:', error);
       toast.error('Failed to load runes data');
@@ -714,6 +749,17 @@ const DashboardScreen = ({
           <div className='mb-6 flex gap-3'>
             <button
               type='button'
+              onClick={() => setRuneView('balance')}
+              className={`rounded-xl border px-6 py-3 text-sm font-semibold transition ${
+                runeView === 'balance'
+                  ? 'border-indigo-500/60 bg-indigo-500/20 text-indigo-100'
+                  : 'border-slate-700 bg-slate-800/50 text-slate-400 hover:border-slate-600 hover:text-slate-300'
+              }`}
+            >
+              Balance
+            </button>
+            <button
+              type='button'
               onClick={() => setRuneView('etch')}
               className={`rounded-xl border px-6 py-3 text-sm font-semibold transition ${
                 runeView === 'etch'
@@ -735,6 +781,80 @@ const DashboardScreen = ({
               Mint
             </button>
           </div>
+
+          {/* Rune Balances List */}
+          {runeView === 'balance' && (
+            <div>
+              <h2 className='mb-4 text-lg font-semibold text-white'>
+                Rune Balances
+              </h2>
+              {loadingRunes ? (
+                <div className='text-center text-slate-400 py-8'>
+                  Loading balances...
+                </div>
+              ) : runeBalances.length === 0 ? (
+                <div className='text-center text-slate-400 py-8'>
+                  No rune balances found
+                </div>
+              ) : (
+                <div className='overflow-x-auto'>
+                  <table className='w-full text-sm'>
+                    <thead>
+                      <tr className='border-b border-slate-800'>
+                        <th className='text-left py-3 px-4 text-slate-400 font-semibold'>
+                          Rune Name
+                        </th>
+                        <th className='text-left py-3 px-4 text-slate-400 font-semibold'>
+                          Rune ID
+                        </th>
+                        <th className='text-right py-3 px-4 text-slate-400 font-semibold'>
+                          Balance
+                        </th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {runeBalances.map((balance, index) => {
+                        // Format balance with decimals
+                        const divisor = BigInt(10 ** balance.decimals);
+                        const wholePart = balance.totalAmount / divisor;
+                        const fractionalPart = balance.totalAmount % divisor;
+                        const formattedBalance =
+                          balance.decimals > 0 && fractionalPart > 0n
+                            ? `${wholePart.toString()}.${fractionalPart
+                                .toString()
+                                .padStart(balance.decimals, '0')
+                                .replace(/0+$/, '')}`
+                            : wholePart.toString();
+
+                        return (
+                          <tr
+                            key={balance.runeId || index}
+                            className='border-b border-slate-800/50 hover:bg-slate-900/30 transition'
+                          >
+                            <td className='py-3 px-4'>
+                              <p className='text-sm font-semibold text-white'>
+                                {balance.runeName}
+                              </p>
+                            </td>
+                            <td className='py-3 px-4'>
+                              <p className='text-xs font-mono text-indigo-300 break-all max-w-[200px] truncate' title={balance.runeId}>
+                                {balance.runeId}
+                              </p>
+                            </td>
+                            <td className='py-3 px-4 text-right'>
+                              <p className='text-sm font-semibold text-emerald-300'>
+                                {formattedBalance}
+                              </p>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+          )}
 
           {/* Etched Runes List */}
           {runeView === 'etch' && (
