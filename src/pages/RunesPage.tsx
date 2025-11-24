@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { Toaster, toast } from 'react-hot-toast';
 import { useNavigate } from 'react-router-dom';
 import Modal from '../components/Modal';
@@ -35,6 +35,28 @@ const SAMPLE_TX_ID =
   'd5afd88323924ccc29bc8a7c68137d43690cbaf55c462535ead8ef83dfb745ff';
 
 type Tab = 'etch' | 'mint';
+
+const toBigIntSafe = (value?: string | number | null): bigint => {
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    return BigInt(Math.max(0, Math.trunc(value)));
+  }
+  if (typeof value === 'string' && value.trim()) {
+    try {
+      return BigInt(value);
+    } catch {
+      return 0n;
+    }
+  }
+  return 0n;
+};
+
+const toBlockHeight = (runeId?: string): number => {
+  if (!runeId) return 0;
+  const [heightPart] = runeId.split(':');
+  if (!heightPart) return 0;
+  const parsed = Number(heightPart);
+  return Number.isFinite(parsed) ? parsed : 0;
+};
 
 const RunesPage = () => {
   const navigate = useNavigate();
@@ -455,6 +477,42 @@ const RunesPage = () => {
     }
   };
 
+  const rankedRunes = useMemo(() => {
+    return availableRunes
+      .map((rune) => {
+        const progress = calculateMintProgress(rune);
+        const minted = toBigIntSafe(rune.mintedAmount);
+        const supply = toBigIntSafe(rune.runeSupply);
+        const blockHeight = toBlockHeight(rune.runeId);
+        return { rune, progress, minted, supply, blockHeight };
+      })
+      .sort((a, b) => {
+        if (b.blockHeight !== a.blockHeight) {
+          return a.blockHeight - b.blockHeight;
+        }
+        if (a.minted !== b.minted) {
+          return a.minted < b.minted ? 1 : -1;
+        }
+        if (a.supply !== b.supply) {
+          return a.supply < b.supply ? 1 : -1;
+        }
+        const nameA = a.rune.runeName?.toLowerCase() ?? '';
+        const nameB = b.rune.runeName?.toLowerCase() ?? '';
+        return nameA.localeCompare(nameB);
+      })
+      .map((entry, index) => ({
+        ...entry,
+        rank: index + 1,
+      }));
+  }, [availableRunes]);
+
+  const paginatedRunes = rankedRunes.slice(
+    (currentPage - 1) * itemsPerPage,
+    currentPage * itemsPerPage
+  );
+
+  const topRunes = rankedRunes.slice(0, 3);
+
   return (
     <>
       <Toaster
@@ -490,11 +548,34 @@ const RunesPage = () => {
                 <h2 className='text-lg font-semibold text-white mb-4'>
                   Available Runes
                 </h2>
+                {topRunes.length > 0 && (
+                  <div className='mb-4 grid gap-3 md:grid-cols-3'>
+                    {topRunes.map(({ rune, progress, rank, blockHeight }) => (
+                      <div
+                        key={`top-rune-${rune.transactionId}-${rank}`}
+                        className='rounded-2xl border border-amber-400/40 bg-amber-500/10 px-4 py-3 shadow-inner shadow-amber-900/20'
+                      >
+                        <p className='text-xs font-semibold uppercase tracking-wide text-amber-200'>
+                          #{rank} Lowest Height
+                        </p>
+                        <p className='mt-1 text-sm font-semibold text-white truncate'>
+                          {rune.runeName || rune.runeId || 'Unnamed Rune'}
+                        </p>
+                        <p className='text-xs text-amber-100/80'>
+                          Block {blockHeight || 'Unknown'}
+                        </p>
+                        <p className='text-xs text-amber-100/60'>
+                          {progress}% minted
+                        </p>
+                      </div>
+                    ))}
+                  </div>
+                )}
                 {loadingAvailableRunes ? (
                   <div className='text-center text-slate-400 py-8'>
                     Loading...
                   </div>
-                ) : availableRunes.length === 0 ? (
+                ) : rankedRunes.length === 0 ? (
                   <div className='text-center text-slate-400 py-8'>
                     No available runes
                   </div>
@@ -505,10 +586,16 @@ const RunesPage = () => {
                         <thead>
                           <tr className='border-b border-slate-800'>
                             <th className='text-left py-3 px-2 text-slate-400 font-semibold'>
+                              Rank
+                            </th>
+                            <th className='text-left py-3 px-2 text-slate-400 font-semibold'>
                               Rune ID
                             </th>
                             <th className='text-left py-3 px-2 text-slate-400 font-semibold'>
                               Name
+                            </th>
+                            <th className='text-left py-3 px-2 text-slate-400 font-semibold'>
+                              Block Height
                             </th>
                             <th className='text-right py-3 px-2 text-slate-400 font-semibold'>
                               Supply
@@ -525,89 +612,89 @@ const RunesPage = () => {
                           </tr>
                         </thead>
                         <tbody>
-                          {availableRunes
-                            .slice(
-                              (currentPage - 1) * itemsPerPage,
-                              currentPage * itemsPerPage
-                            )
-                            .map((rune, index) => {
-                              const progress = calculateMintProgress(rune);
-                              const supply = rune.runeSupply
-                                ? BigInt(rune.runeSupply)
-                                : 0n;
-                              const minted = rune.mintedAmount
-                                ? BigInt(rune.mintedAmount)
-                                : 0n;
-                              const remaining = supply - minted;
-                              const isFullyMinted = remaining <= 0n;
+                          {paginatedRunes.map(({ rune, progress, rank, blockHeight }) => {
+                            const supply = toBigIntSafe(rune.runeSupply);
+                            const minted = toBigIntSafe(rune.mintedAmount);
+                            const remaining = supply - minted;
+                            const isFullyMinted = remaining <= 0n;
 
-                              return (
-                                <tr
-                                  key={rune.transactionId || index}
-                                  className='border-b border-slate-800/50 hover:bg-slate-900/30 transition'
-                                >
-                                  <td className='py-3 px-2'>
-                                    <p
-                                      className='text-xs font-mono text-indigo-300 break-all max-w-[120px] truncate'
-                                      title={rune.runeId}
-                                    >
-                                      {rune.runeId}
-                                    </p>
-                                  </td>
-                                  <td className='py-3 px-2'>
-                                    <p className='text-sm font-semibold text-white'>
-                                      {rune.runeName || 'N/A'}
-                                    </p>
-                                  </td>
-                                  <td className='py-3 px-2 text-right'>
-                                    <p className='text-sm text-white'>
-                                      {rune.runeSupply || '0'}
-                                    </p>
-                                  </td>
-                                  <td className='py-3 px-2 text-right'>
-                                    <p className='text-sm text-white'>
-                                      {rune.mintedAmount || 0}
-                                    </p>
-                                  </td>
-                                  <td className='py-3 px-2'>
-                                    <div className='flex items-center gap-2'>
-                                      <div className='flex-1 h-2 bg-slate-800 rounded-full overflow-hidden min-w-[60px]'>
-                                        <div
-                                          className='h-full bg-indigo-500 transition-all'
-                                          style={{ width: `${progress}%` }}
-                                        />
-                                      </div>
-                                      <span className='text-xs text-slate-400 min-w-[35px] text-right'>
-                                        {progress}%
-                                      </span>
+                            return (
+                              <tr
+                                key={rune.transactionId || `${rune.runeId}-${rank}`}
+                                className='border-b border-slate-800/50 hover:bg-slate-900/30 transition'
+                              >
+                                <td className='py-3 px-2'>
+                                  <span className='inline-flex items-center rounded-lg border border-slate-800 bg-slate-900/60 px-2 py-1 text-xs font-semibold text-slate-200'>
+                                    #{rank}
+                                  </span>
+                                </td>
+                                <td className='py-3 px-2'>
+                                  <p
+                                    className='text-xs font-mono text-indigo-300 break-all max-w-[120px] truncate'
+                                    title={rune.runeId}
+                                  >
+                                    {rune.runeId}
+                                  </p>
+                                </td>
+                                <td className='py-3 px-2'>
+                                  <p className='text-sm font-semibold text-white'>
+                                    {rune.runeName || 'N/A'}
+                                  </p>
+                                </td>
+                                <td className='py-3 px-2'>
+                                  <p className='text-sm text-slate-200'>
+                                    {blockHeight || '—'}
+                                  </p>
+                                </td>
+                                <td className='py-3 px-2 text-right'>
+                                  <p className='text-sm text-white'>
+                                    {rune.runeSupply || '0'}
+                                  </p>
+                                </td>
+                                <td className='py-3 px-2 text-right'>
+                                  <p className='text-sm text-white'>
+                                    {rune.mintedAmount || 0}
+                                  </p>
+                                </td>
+                                <td className='py-3 px-2'>
+                                  <div className='flex items-center gap-2'>
+                                    <div className='flex-1 h-2 bg-slate-800 rounded-full overflow-hidden min-w-[60px]'>
+                                      <div
+                                        className='h-full bg-indigo-500 transition-all'
+                                        style={{ width: `${progress}%` }}
+                                      />
                                     </div>
-                                  </td>
-                                  <td className='py-3 px-2 text-center sticky right-0 bg-slate-950/70 z-10'>
-                                    <button
-                                      type='button'
-                                      onClick={() => handleMintFromList(rune)}
-                                      disabled={isFullyMinted}
-                                      className='rounded-lg border border-emerald-500/60 bg-emerald-500/20 px-3 py-1 text-xs font-semibold text-emerald-100 transition hover:border-emerald-400 hover:bg-emerald-500/30 disabled:opacity-60 disabled:cursor-not-allowed whitespace-nowrap'
-                                    >
-                                      {isFullyMinted ? 'Full' : 'Mint'}
-                                    </button>
-                                  </td>
-                                </tr>
-                              );
-                            })}
+                                    <span className='text-xs text-slate-400 min-w-[35px] text-right'>
+                                      {progress}%
+                                    </span>
+                                  </div>
+                                </td>
+                                <td className='py-3 px-2 text-center sticky right-0 bg-slate-950/70 z-10'>
+                                  <button
+                                    type='button'
+                                    onClick={() => handleMintFromList(rune)}
+                                    disabled={isFullyMinted}
+                                    className='rounded-lg border border-emerald-500/60 bg-emerald-500/20 px-3 py-1 text-xs font-semibold text-emerald-100 transition hover:border-emerald-400 hover:bg-emerald-500/30 disabled:opacity-60 disabled:cursor-not-allowed whitespace-nowrap'
+                                  >
+                                    {isFullyMinted ? 'Full' : 'Mint'}
+                                  </button>
+                                </td>
+                              </tr>
+                            );
+                          })}
                         </tbody>
                       </table>
                     </div>
                     {/* Pagination */}
-                    {availableRunes.length > itemsPerPage && (
+                    {rankedRunes.length > itemsPerPage && (
                       <div className='mt-4 flex items-center justify-between'>
                         <div className='text-sm text-slate-400'>
                           Showing {(currentPage - 1) * itemsPerPage + 1} to{' '}
                           {Math.min(
                             currentPage * itemsPerPage,
-                            availableRunes.length
+                            rankedRunes.length
                           )}{' '}
-                          of {availableRunes.length} runes
+                          of {rankedRunes.length} runes
                         </div>
                         <div className='flex gap-2'>
                           <button
@@ -622,23 +709,21 @@ const RunesPage = () => {
                           </button>
                           <span className='flex items-center px-3 py-1 text-sm text-slate-300'>
                             Page {currentPage} of{' '}
-                            {Math.ceil(availableRunes.length / itemsPerPage)}
+                            {Math.ceil(rankedRunes.length / itemsPerPage)}
                           </span>
                           <button
                             type='button'
                             onClick={() =>
                               setCurrentPage((prev) =>
                                 Math.min(
-                                  Math.ceil(
-                                    availableRunes.length / itemsPerPage
-                                  ),
+                                  Math.ceil(rankedRunes.length / itemsPerPage),
                                   prev + 1
                                 )
                               )
                             }
                             disabled={
                               currentPage >=
-                              Math.ceil(availableRunes.length / itemsPerPage)
+                              Math.ceil(rankedRunes.length / itemsPerPage)
                             }
                             className='rounded-lg border border-slate-700 px-3 py-1 text-sm text-slate-300 transition hover:border-slate-600 disabled:opacity-50 disabled:cursor-not-allowed'
                           >

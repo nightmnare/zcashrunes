@@ -260,6 +260,42 @@ export const getAvailableRunes = async (): Promise<RuneEtchDto[]> => {
     ) as RuneEtchDto[];
 };
 
+const sortByCreatedAtDesc = <T extends { createdAt?: string }>(items: T[]) => {
+  return items.sort((a, b) => {
+    const dateA = a.createdAt || '';
+    const dateB = b.createdAt || '';
+    return dateB.localeCompare(dateA);
+  });
+};
+
+export const getRecentRuneEtches = async (
+  limitCount = 50
+): Promise<RuneEtchDto[]> => {
+  const db = getFirestore(firebaseApp);
+  const q = query(collection(db, 'runes'), limit(1000));
+  const querySnapshot = await getDocs(q);
+
+  const runes = querySnapshot.docs.map((docSnap) => ({
+    ...docSnap.data(),
+  })) as RuneEtchDto[];
+
+  return sortByCreatedAtDesc(runes).slice(0, limitCount);
+};
+
+export const getRecentRuneMints = async (
+  limitCount = 50
+): Promise<RuneMintDto[]> => {
+  const db = getFirestore(firebaseApp);
+  const q = query(collection(db, 'runesMint'), limit(1000));
+  const querySnapshot = await getDocs(q);
+
+  const mints = querySnapshot.docs.map((docSnap) => ({
+    ...docSnap.data(),
+  })) as RuneMintDto[];
+
+  return sortByCreatedAtDesc(mints).slice(0, limitCount);
+};
+
 /**
  * Fetch transaction data from Zcash explorer
  */
