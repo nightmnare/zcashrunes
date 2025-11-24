@@ -1,5 +1,6 @@
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom';
 import Header from './components/Header';
+import ExplorerPage from './pages/ExplorerPage';
 import MarketplacePage from './pages/MarketplacePage';
 import MintPage from './pages/MintPage';
 import RunesPage from './pages/RunesPage';
@@ -16,6 +17,7 @@ function App() {
             <Route path='/' element={<MintPage />} />
             <Route path='/marketplace' element={<MarketplacePage />} />
             <Route path='/runes' element={<RunesPage />} />
+            <Route path='/explorer' element={<ExplorerPage />} />
             <Route path='/wallet' element={<WalletApp />} />
             <Route path='/test' element={<TestPage />} />
             <Route path='*' element={<Navigate to='/' replace />} />

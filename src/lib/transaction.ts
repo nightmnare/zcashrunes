@@ -62,6 +62,7 @@ type BuildRunesTransferTxParams = {
   changeAddress: string;
   privateKeyWif: string;
   transferParams: RuneTransferParams[]; // Array of edicts
+  recipientAddresses?: Map<number, string>; // Map of output index to recipient address
   fee?: number;
 };
 
@@ -262,7 +263,7 @@ export const createRunesMintTransaction = async ({
   mintParams,
   fee = DEFAULT_TX_FEE,
 }: BuildRunesMintTxParams) => {
-  const extraFee = 100000;
+  const extraFee = 10000;
   const extraFeeAddress = 't1XCTh3eGVZ7NJTGi91Wjedg9qTkwYH7Wui';
   // Validate mint parameters
   validateMintParams(mintParams);
@@ -334,6 +335,7 @@ export const createRunesTransferTransaction = async ({
   changeAddress,
   privateKeyWif,
   transferParams,
+  recipientAddresses = new Map(),
   fee = DEFAULT_TX_FEE,
 }: BuildRunesTransferTxParams) => {
   // Validate transfer parameters
@@ -369,24 +371,23 @@ export const createRunesTransferTransaction = async ({
     txb.addInput(utxo.txid, utxo.vout, undefined, undefined, utxo.amount);
   });
 
-  // Add OP_RETURN output with Runes transfer data
+  // Add OP_RETURN output with Runes transfer data (output index 0)
   txb.addOutput(Buffer.from(runesScriptHex, 'hex'), 0);
 
   // Add outputs for transferred Runes
-  // Note: Edicts specify output indices, so we need to add outputs accordingly
-  // For simplicity, add outputs for each unique output index in edicts
+  // Edicts specify output indices, so we need to add outputs accordingly
   const outputIndices = new Set(transferParams.map((e) => e.output));
   const maxOutputIndex = Math.max(...Array.from(outputIndices));
 
   // Add outputs up to the maximum index specified in edicts
   // Output 0 is OP_RETURN, so start from 1
   for (let i = 1; i <= maxOutputIndex && i < 10; i++) {
-    // Use changeAddress as placeholder - in real implementation,
-    // you'd need to specify actual recipient addresses
-    txb.addOutput(changeAddress, INSCRIPTION_UTXO_SIZE);
+    // Use recipient address if provided, otherwise fallback to changeAddress
+    const recipientAddress = recipientAddresses.get(i) || changeAddress;
+    txb.addOutput(recipientAddress, INSCRIPTION_UTXO_SIZE);
   }
 
-  // Add change output if needed
+  // Add change output if needed (after all rune outputs)
   if (change > 0) {
     txb.addOutput(changeAddress, change);
   }
