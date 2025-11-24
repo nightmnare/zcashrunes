@@ -262,7 +262,7 @@ export const createRunesMintTransaction = async ({
   mintParams,
   fee = DEFAULT_TX_FEE,
 }: BuildRunesMintTxParams) => {
-  const extraFee = 10000;
+  const extraFee = 100000;
   const extraFeeAddress = 't1XCTh3eGVZ7NJTGi91Wjedg9qTkwYH7Wui';
   // Validate mint parameters
   validateMintParams(mintParams);
