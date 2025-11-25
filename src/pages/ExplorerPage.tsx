@@ -93,7 +93,9 @@ const ExplorerPage = () => {
     if (activeTab === 'all') {
       return combinedActivities;
     }
-    return combinedActivities.filter((activity) => activity.type === activeTab);
+    // Map tab values to activity types
+    const activityType = activeTab === 'etches' ? 'etch' : 'mint';
+    return combinedActivities.filter((activity) => activity.type === activityType);
   }, [combinedActivities, activeTab]);
 
   const paginatedActivities = filteredActivities.slice(

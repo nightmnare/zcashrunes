@@ -62,6 +62,7 @@ type BuildRunesTransferTxParams = {
   changeAddress: string;
   privateKeyWif: string;
   transferParams: RuneTransferParams[]; // Array of edicts
+  recipientAddresses?: Map<number, string>; // Map of output index to recipient address
   fee?: number;
 };
 
@@ -334,6 +335,7 @@ export const createRunesTransferTransaction = async ({
   changeAddress,
   privateKeyWif,
   transferParams,
+  recipientAddresses = new Map(),
   fee = DEFAULT_TX_FEE,
 }: BuildRunesTransferTxParams) => {
   // Validate transfer parameters
