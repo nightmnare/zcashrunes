@@ -10,16 +10,13 @@ import {
   updateRuneEtchMintedAmount,
   getRuneEtchByRuneId,
   getAvailableRunes,
-  getRuneMintsByAddress,
   type SendTransactionResponse,
   type RuneEtchDto,
-  type RuneMintDto,
 } from '../lib/api';
 import {
   DEFAULT_TX_FEE,
   createRunesEtchTransaction,
   createRunesMintTransaction,
-  createRunesTransferTransaction,
   type UtxoInput,
 } from '../lib/transaction';
 import {
@@ -37,7 +34,7 @@ const ZCASH_TX_EXPLORER_BASE = 'https://blockchair.com/zcash/transaction';
 const SAMPLE_TX_ID =
   'd5afd88323924ccc29bc8a7c68137d43690cbaf55c462535ead8ef83dfb745ff';
 
-type Tab = 'etch' | 'mint' | 'transfer';
+type Tab = 'etch' | 'mint';
 
 const toBigIntSafe = (value?: string | number | null): bigint => {
   if (typeof value === 'number' && Number.isFinite(value)) {
@@ -89,17 +86,6 @@ const RunesPage = () => {
   const [mintTxResultPayload, setMintTxResultPayload] =
     useState<SendTransactionResponse | null>(null);
 
-  // Transfer form state
-  const [transferRuneId, setTransferRuneId] = useState('');
-  const [transferAmount, setTransferAmount] = useState('');
-  const [transferRecipient, setTransferRecipient] = useState('');
-  const [transferTipAmount, setTransferTipAmount] = useState(RECOMMENDED_TIP_DISPLAY);
-  const [transferProcessing, setTransferProcessing] = useState(false);
-  const [transferTxResultModalOpen, setTransferTxResultModalOpen] = useState(false);
-  const [transferTxResultPayload, setTransferTxResultPayload] =
-    useState<SendTransactionResponse | null>(null);
-  const [userRuneMints, setUserRuneMints] = useState<RuneMintDto[]>([]);
-  const [loadingUserRunes, setLoadingUserRunes] = useState(false);
 
   // Available runes list
   const [availableRunes, setAvailableRunes] = useState<RuneEtchDto[]>([]);
@@ -129,16 +115,6 @@ const RunesPage = () => {
   const mintBaseFeeZec = DEFAULT_TX_FEE / ZATOSHI_PER_ZEC;
   const mintTotalFeeZec = (DEFAULT_TX_FEE + mintTipZatoshis) / ZATOSHI_PER_ZEC;
 
-  // Transfer calculations
-  const parsedTransferTip = Number(transferTipAmount);
-  const transferTipAmountIsFinite = Number.isFinite(parsedTransferTip);
-  const normalizedTransferTip =
-    transferTipAmountIsFinite && parsedTransferTip > 0 ? parsedTransferTip : 0;
-  const transferTipIsNegative = transferTipAmountIsFinite && parsedTransferTip < 0;
-  const transferTipZatoshis = Math.round(normalizedTransferTip * ZATOSHI_PER_ZEC);
-  const transferBaseFeeZec = DEFAULT_TX_FEE / ZATOSHI_PER_ZEC;
-  const transferTotalFeeZec = (DEFAULT_TX_FEE + transferTipZatoshis) / ZATOSHI_PER_ZEC;
-
   const etchTxResultId = etchTxResultPayload?.result ?? null;
   const etchTxResultError =
     formatErrorMessage(etchTxResultPayload?.error) || null;
@@ -153,14 +129,6 @@ const RunesPage = () => {
   const mintTxHasError = Boolean(mintTxResultError);
   const mintTxExplorerUrl = `${ZCASH_TX_EXPLORER_BASE}/${
     mintTxResultId || SAMPLE_TX_ID
-  }`;
-
-  const transferTxResultId = transferTxResultPayload?.result ?? null;
-  const transferTxResultError =
-    formatErrorMessage(transferTxResultPayload?.error) || null;
-  const transferTxHasError = Boolean(transferTxResultError);
-  const transferTxExplorerUrl = `${ZCASH_TX_EXPLORER_BASE}/${
-    transferTxResultId || SAMPLE_TX_ID
   }`;
 
   const handleEtch = async () => {
@@ -438,94 +406,6 @@ const RunesPage = () => {
     }
   };
 
-  const handleTransfer = async () => {
-    if (!transferRuneId.trim()) {
-      toast.error('Select a rune to transfer');
-      return;
-    }
-    if (!transferRecipient.trim()) {
-      toast.error('Enter a recipient address');
-      return;
-    }
-    if (!transferAmount.trim() || Number(transferAmount) < 0) {
-      toast.error('Enter a valid transfer amount (use 0 to transfer all)');
-      return;
-    }
-    if (transferTipIsNegative) {
-      toast.error('Tip amount must be zero or greater');
-      return;
-    }
-    const record = loadWalletRecord();
-    if (!record) {
-      toast.error('Create or unlock your wallet in the Wallet tab first');
-      return;
-    }
-
-    const walletPassword = getWalletPassword();
-    if (!walletPassword) {
-      toast.error('Wallet password not available. Please unlock your wallet.');
-      navigate('/wallet');
-      return;
-    }
-
-    setTransferProcessing(true);
-    try {
-      const wallet = await decryptWalletRecord(walletPassword, record);
-      const utxoList = await getUtxos({ address: wallet.address });
-      const normalizedUtxos: UtxoInput[] = Array.isArray(utxoList)
-        ? (utxoList as UtxoInput[])
-        : [];
-      if (!normalizedUtxos.length) {
-        toast.error('No funds available to cover the transfer fee');
-        return;
-      }
-      const feeZatoshis = DEFAULT_TX_FEE + transferTipZatoshis;
-
-      // Create Runes transfer transaction
-      // Output index 1 will be the recipient address
-      const recipientAddressMap = new Map<number, string>();
-      recipientAddressMap.set(1, transferRecipient.trim());
-
-      const { hex } = await createRunesTransferTransaction({
-        utxos: normalizedUtxos,
-        changeAddress: wallet.address,
-        privateKeyWif: wallet.privateKeyWif,
-        transferParams: [
-          {
-            runeId: transferRuneId.trim(),
-            amount: transferAmount.trim(),
-            output: 1, // Output index 1 (after OP_RETURN at index 0)
-          },
-        ],
-        recipientAddresses: recipientAddressMap,
-        fee: feeZatoshis,
-      });
-
-      const response = await sendTransaction({ hex });
-      setTransferTxResultPayload(response);
-      setTransferTxResultModalOpen(true);
-      if (response.error) {
-        toast.error(response.error || 'Please increase fee');
-        return;
-      }
-
-      toast.success('Rune transferred successfully!');
-      // Reset form
-      setTransferRuneId('');
-      setTransferAmount('');
-      setTransferRecipient('');
-      // Refresh user runes list
-      await loadUserRuneMints();
-    } catch (error) {
-      toast.error(
-        error instanceof Error ? error.message : 'Unable to transfer rune'
-      );
-    } finally {
-      setTransferProcessing(false);
-      setWalletRecord(loadWalletRecord());
-    }
-  };
-
   const closeEtchTxResultModal = () => {
     setEtchTxResultModalOpen(false);
     setEtchTxResultPayload(null);
@@ -535,35 +415,6 @@ const RunesPage = () => {
     setMintTxResultModalOpen(false);
     setMintTxResultPayload(null);
   };
-
-  const closeTransferTxResultModal = () => {
-    setTransferTxResultModalOpen(false);
-    setTransferTxResultPayload(null);
-  };
-
-  // Load user's rune mints
-  const loadUserRuneMints = async () => {
-    if (!walletAddress) {
-      setUserRuneMints([]);
-      return;
-    }
-    setLoadingUserRunes(true);
-    try {
-      const mints = await getRuneMintsByAddress(walletAddress);
-      setUserRuneMints(mints);
-    } catch (error) {
-      console.error('Failed to load user rune mints:', error);
-      toast.error('Failed to load your rune mints');
-    } finally {
-      setLoadingUserRunes(false);
-    }
-  };
-
-  // Load user runes when wallet address changes
-  useEffect(() => {
-    loadUserRuneMints();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [walletAddress]);
 
   // Load available runes
   const loadAvailableRunes = async () => {
@@ -921,17 +772,6 @@ const RunesPage = () => {
                   >
                     Mint
                   </button>
-                  <button
-                    type='button'
-                    onClick={() => setActiveTab('transfer')}
-                    className={`px-4 py-3 text-sm font-semibold transition ${
-                      activeTab === 'transfer'
-                        ? 'border-b-2 border-indigo-400 text-indigo-100'
-                        : 'text-slate-400 hover:text-slate-200'
-                    }`}
-                  >
-                    Transfer
-                  </button>
                 </div>
 
                 {/* Etch Form */}
@@ -1188,142 +1028,6 @@ const RunesPage = () => {
                   </div>
                 )}
 
-                {/* Transfer Form */}
-                {activeTab === 'transfer' && (
-                  <div className='mt-6 space-y-6'>
-                    <div>
-                      <label className='block text-sm font-medium text-slate-300'>
-                        Select Rune to Transfer
-                      </label>
-                      {loadingUserRunes ? (
-                        <div className='mt-2 text-sm text-slate-400'>
-                          Loading your runes...
-                        </div>
-                      ) : userRuneMints.length === 0 ? (
-                        <div className='mt-2 text-sm text-rose-200'>
-                          No runes found in your wallet. Mint some runes first.
-                        </div>
-                      ) : (
-                        <select
-                          value={transferRuneId}
-                          onChange={(event) => setTransferRuneId(event.target.value)}
-                          disabled={transferProcessing}
-                          className='mt-2 w-full rounded-2xl border border-slate-800 bg-slate-900/60 px-4 py-3 text-sm text-slate-100 outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 disabled:opacity-60'
-                        >
-                          <option value=''>Select a rune...</option>
-                          {userRuneMints.map((mint) => (
-                            <option key={mint.transactionId} value={mint.runeId}>
-                              {mint.runeName} ({mint.runeId}) - Amount: {mint.amount}
-                            </option>
-                          ))}
-                        </select>
-                      )}
-                      <p className='mt-1 text-xs text-slate-500'>
-                        Select a rune from your wallet to transfer
-                      </p>
-                    </div>
-
-                    <div>
-                      <label className='block text-sm font-medium text-slate-300'>
-                        Recipient Address
-                      </label>
-                      <input
-                        type='text'
-                        value={transferRecipient}
-                        onChange={(event) =>
-                          setTransferRecipient(event.target.value)
-                        }
-                        placeholder='t1...'
-                        disabled={transferProcessing}
-                        className='mt-2 w-full rounded-2xl border border-slate-800 bg-slate-900/60 px-4 py-3 text-sm text-slate-100 outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 disabled:opacity-60'
-                      />
-                      <p className='mt-1 text-xs text-slate-500'>
-                        Zcash address to receive the runes
-                      </p>
-                    </div>
-
-                    <div>
-                      <label className='block text-sm font-medium text-slate-300'>
-                        Transfer Amount
-                      </label>
-                      <input
-                        type='number'
-                        value={transferAmount}
-                        onChange={(event) => setTransferAmount(event.target.value)}
-                        placeholder='1000'
-                        disabled={transferProcessing}
-                        min='1'
-                        className='mt-2 w-full rounded-2xl border border-slate-800 bg-slate-900/60 px-4 py-3 text-sm text-slate-100 outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 disabled:opacity-60'
-                      />
-                      <p className='mt-1 text-xs text-slate-500'>
-                        Amount of runes to transfer (use 0 to transfer all)
-                      </p>
-                    </div>
-
-                    <div>
-                      <div className='flex items-center justify-between text-sm font-medium text-slate-300'>
-                        <span>Fast Tip (ZEC)</span>
-                        <button
-                          type='button'
-                          onClick={() =>
-                            setTransferTipAmount(RECOMMENDED_TIP_DISPLAY)
-                          }
-                          disabled={transferProcessing}
-                          className='text-xs uppercase tracking-wide text-indigo-300 hover:text-indigo-200 disabled:opacity-60'
-                        >
-                          Use {RECOMMENDED_TIP_DISPLAY}
-                        </button>
-                      </div>
-                      <input
-                        type='number'
-                        step='0.00000001'
-                        min='0'
-                        value={transferTipAmount}
-                        onChange={(event) =>
-                          setTransferTipAmount(event.target.value)
-                        }
-                        placeholder={RECOMMENDED_TIP_DISPLAY}
-                        disabled={transferProcessing}
-                        className='mt-2 w-full rounded-2xl border border-slate-800 bg-slate-900/60 px-4 py-3 text-sm text-slate-100 outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 disabled:opacity-60'
-                      />
-                      <p className='mt-2 text-xs text-slate-400'>
-                        Base fee {transferBaseFeeZec.toFixed(8)} ZEC · Total fee
-                        with tip {transferTotalFeeZec.toFixed(8)} ZEC
-                      </p>
-                    </div>
-
-                    <div className='rounded-2xl border border-slate-800/60 bg-slate-900/50 p-4'>
-                      <p className='text-xs uppercase tracking-widest text-slate-400'>
-                        Transferring Wallet
-                      </p>
-                      {walletAddress ? (
-                        <p className='mt-2 break-all font-mono text-sm text-slate-100'>
-                          {walletAddress}
-                        </p>
-                      ) : (
-                        <p className='mt-2 text-sm text-rose-200'>
-                          No wallet detected. Create or unlock a wallet from the
-                          Wallet tab.
-                        </p>
-                      )}
-                    </div>
-
-                    <button
-                      type='button'
-                      onClick={handleTransfer}
-                      disabled={
-                        !walletRecord ||
-                        transferProcessing ||
-                        !transferRuneId ||
-                        !transferRecipient ||
-                        !transferAmount
-                      }
-                      className='mt-8 w-full rounded-2xl border border-emerald-500/60 bg-emerald-500/20 px-4 py-3 text-sm font-semibold uppercase tracking-wide text-emerald-100 transition hover:border-emerald-400 disabled:cursor-not-allowed disabled:opacity-60'
-                    >
-                      {transferProcessing ? 'Transferring...' : 'Transfer Rune'}
-                    </button>
-                  </div>
-                )}
               </div>
             </div>
           </div>
@@ -1462,71 +1166,6 @@ const RunesPage = () => {
         )}
       </Modal>
 
-      {/* Transfer Transaction Result Modal */}
-      <Modal
-        open={transferTxResultModalOpen}
-        title='Transfer Transaction Status'
-        onClose={closeTransferTxResultModal}
-      >
-        {transferTxResultPayload ? (
-          <div className='space-y-4'>
-            <div className='rounded-2xl border border-slate-800 bg-slate-950/60 p-4'>
-              <p className='text-xs uppercase tracking-wide text-slate-400'>
-                Result
-              </p>
-              {transferTxResultId ? (
-                <a
-                  href={transferTxExplorerUrl}
-                  target='_blank'
-                  rel='noreferrer'
-                  className='mt-2 inline-flex break-all font-mono text-sm text-indigo-200 underline'
-                >
-                  {transferTxResultId}
-                </a>
-              ) : (
-                <p className='mt-2 break-all font-mono text-sm text-slate-100'>
-                  No transaction id
-                </p>
-              )}
-            </div>
-            <div className='rounded-2xl border border-slate-800 bg-slate-950/60 p-4'>
-              <p className='text-xs uppercase tracking-wide text-slate-400'>
-                Status
-              </p>
-              <p
-                className={`mt-2 text-sm ${
-                  transferTxHasError ? 'text-rose-300' : 'text-emerald-300'
-                }`}
-              >
-                {transferTxHasError
-                  ? transferTxResultError ?? 'Please increase fee'
-                  : 'Success'}
-              </p>
-            </div>
-            {transferTxHasError ? (
-              <p className='text-sm text-rose-200'>
-                Please increase fee and try again.
-              </p>
-            ) : (
-              <div className='space-y-3'>
-                <p className='text-sm text-emerald-200'>
-                  Transfer transaction broadcasted successfully.
-                </p>
-                <a
-                  href={transferTxExplorerUrl}
-                  target='_blank'
-                  rel='noreferrer'
-                  className='block rounded-2xl border border-indigo-500/60 bg-indigo-500/10 px-4 py-2 text-center text-sm font-medium text-indigo-100 hover:border-indigo-400'
-                >
-                  View transaction
-                </a>
-              </div>
-            )}
-          </div>
-        ) : (
-          <p className='text-sm text-slate-300'>Awaiting transaction result…</p>
-        )}
-      </Modal>
     </>
   );
 };
