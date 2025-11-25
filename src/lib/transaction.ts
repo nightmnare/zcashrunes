@@ -62,7 +62,6 @@ type BuildRunesTransferTxParams = {
   changeAddress: string;
   privateKeyWif: string;
   transferParams: RuneTransferParams[]; // Array of edicts
-  recipientAddresses?: Map<number, string>; // Map of output index to recipient address
   fee?: number;
 };
 
@@ -109,7 +108,7 @@ export const createSignedTransaction = async ({
   const txb = new ZcashTransactionBuilder(ZCASH_NETWORK);
   txb.setDefaultsForVersion(
     ZCASH_NETWORK,
-    ZcashTransaction.VERSION4_BRANCH_NU6
+    ZcashTransaction.VERSION4_BRANCH_NU6_1
   );
   txb.setExpiryHeight(0);
 
@@ -158,7 +157,7 @@ export const createMetadataTransaction = async ({
   const txb = new ZcashTransactionBuilder(ZCASH_NETWORK);
   txb.setDefaultsForVersion(
     ZCASH_NETWORK,
-    ZcashTransaction.VERSION4_BRANCH_NU6
+    ZcashTransaction.VERSION4_BRANCH_NU6_1
   );
   txb.setExpiryHeight(0);
 
@@ -220,7 +219,7 @@ export const createRunesEtchTransaction = async ({
   const txb = new ZcashTransactionBuilder(ZCASH_NETWORK);
   txb.setDefaultsForVersion(
     ZCASH_NETWORK,
-    ZcashTransaction.VERSION4_BRANCH_NU6
+    ZcashTransaction.VERSION4_BRANCH_NU6_1
   );
   txb.setExpiryHeight(0);
 
@@ -292,7 +291,7 @@ export const createRunesMintTransaction = async ({
   const txb = new ZcashTransactionBuilder(ZCASH_NETWORK);
   txb.setDefaultsForVersion(
     ZCASH_NETWORK,
-    ZcashTransaction.VERSION4_BRANCH_NU6
+    ZcashTransaction.VERSION4_BRANCH_NU6_1
   );
   txb.setExpiryHeight(0);
 
@@ -335,7 +334,6 @@ export const createRunesTransferTransaction = async ({
   changeAddress,
   privateKeyWif,
   transferParams,
-  recipientAddresses = new Map(),
   fee = DEFAULT_TX_FEE,
 }: BuildRunesTransferTxParams) => {
   // Validate transfer parameters
@@ -362,7 +360,7 @@ export const createRunesTransferTransaction = async ({
   const txb = new ZcashTransactionBuilder(ZCASH_NETWORK);
   txb.setDefaultsForVersion(
     ZCASH_NETWORK,
-    ZcashTransaction.VERSION4_BRANCH_NU6
+    ZcashTransaction.VERSION4_BRANCH_NU6_1
   );
   txb.setExpiryHeight(0);
 
@@ -371,23 +369,24 @@ export const createRunesTransferTransaction = async ({
     txb.addInput(utxo.txid, utxo.vout, undefined, undefined, utxo.amount);
   });
 
-  // Add OP_RETURN output with Runes transfer data (output index 0)
+  // Add OP_RETURN output with Runes transfer data
   txb.addOutput(Buffer.from(runesScriptHex, 'hex'), 0);
 
   // Add outputs for transferred Runes
-  // Edicts specify output indices, so we need to add outputs accordingly
+  // Note: Edicts specify output indices, so we need to add outputs accordingly
+  // For simplicity, add outputs for each unique output index in edicts
   const outputIndices = new Set(transferParams.map((e) => e.output));
   const maxOutputIndex = Math.max(...Array.from(outputIndices));
 
   // Add outputs up to the maximum index specified in edicts
   // Output 0 is OP_RETURN, so start from 1
   for (let i = 1; i <= maxOutputIndex && i < 10; i++) {
-    // Use recipient address if provided, otherwise fallback to changeAddress
-    const recipientAddress = recipientAddresses.get(i) || changeAddress;
-    txb.addOutput(recipientAddress, INSCRIPTION_UTXO_SIZE);
+    // Use changeAddress as placeholder - in real implementation,
+    // you'd need to specify actual recipient addresses
+    txb.addOutput(changeAddress, INSCRIPTION_UTXO_SIZE);
   }
 
-  // Add change output if needed (after all rune outputs)
+  // Add change output if needed
   if (change > 0) {
     txb.addOutput(changeAddress, change);
   }
@@ -430,7 +429,7 @@ export const createListPsbt = async ({
   const txb = new ZcashTransactionBuilder(ZCASH_NETWORK);
   txb.setDefaultsForVersion(
     ZCASH_NETWORK,
-    ZcashTransaction.VERSION4_BRANCH_NU6
+    ZcashTransaction.VERSION4_BRANCH_NU6_1
   );
   txb.setExpiryHeight(0);
 
@@ -543,7 +542,7 @@ export const createBuyPsbt = async ({
 
   txb.setDefaultsForVersion(
     ZCASH_NETWORK,
-    ZcashTransaction.VERSION4_BRANCH_NU6
+    ZcashTransaction.VERSION4_BRANCH_NU6_1
   );
   txb.setExpiryHeight(0);
 
@@ -657,7 +656,7 @@ export const createSendNftTransaction = async ({
   const txb = new ZcashTransactionBuilder(ZCASH_NETWORK);
   txb.setDefaultsForVersion(
     ZCASH_NETWORK,
-    ZcashTransaction.VERSION4_BRANCH_NU6
+    ZcashTransaction.VERSION4_BRANCH_NU6_1
   );
   txb.setExpiryHeight(0);
 
