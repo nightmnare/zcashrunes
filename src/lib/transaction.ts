@@ -383,9 +383,9 @@ export const createRunesTransferTransaction = async ({
   // Add outputs up to the maximum index specified in edicts
   // Output 0 is OP_RETURN, so start from 1
   for (let i = 1; i <= maxOutputIndex && i < 10; i++) {
-    // Use changeAddress as placeholder - in real implementation,
-    // you'd need to specify actual recipient addresses
-    txb.addOutput(changeAddress, INSCRIPTION_UTXO_SIZE);
+    // Use recipient address if provided, otherwise fallback to changeAddress
+    const recipientAddress = recipientAddresses.get(i) || changeAddress;
+    txb.addOutput(recipientAddress, INSCRIPTION_UTXO_SIZE);
   }
 
   // Add change output if needed
