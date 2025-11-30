@@ -708,3 +708,126 @@ export const createSendNftTransaction = async ({
     feeUsed: totalFee,
   };
 };
+
+type CreateBuyRuneParams = {
+  runeUtxo: {
+    txid: string;
+    vout: number;
+    amount: number; // in zatoshis
+  };
+  buyerUtxos: UtxoInput[];
+  buyerAddress: string;
+  buyerPrivateKeyWif: string;
+  sellerAddress: string;
+  runeId: string;
+  runeAmount: string; // Amount of runes to transfer
+  priceAmount: number; // in ZEC
+  fee?: number;
+};
+
+/**
+ * Create a transaction to buy runes
+ * This combines a rune transfer with payment to the seller
+ */
+export const createBuyRuneTransaction = async ({
+  runeUtxo,
+  buyerUtxos,
+  buyerAddress,
+  buyerPrivateKeyWif,
+  sellerAddress,
+  runeId,
+  runeAmount,
+  priceAmount,
+  fee = DEFAULT_TX_FEE,
+}: CreateBuyRuneParams) => {
+  if (fee <= 0) {
+    throw new Error('Fee must be greater than zero');
+  }
+
+  const priceZatoshis = Math.round(priceAmount * 10 ** 8);
+  if (priceZatoshis <= 0) {
+    throw new Error('Price must be greater than zero');
+  }
+
+  // Calculate total needed: price + fee + rune inscription size
+  const totalNeeded = priceZatoshis + fee + INSCRIPTION_UTXO_SIZE;
+
+  // Select buyer's utxos to cover the cost
+  const { inputs: buyerInputs, total: buyerTotal } = selectUtxos(
+    buyerUtxos,
+    totalNeeded
+  );
+
+  const change = buyerTotal - totalNeeded;
+
+  // Create rune transfer script
+  const transferParams: RuneTransferParams[] = [
+    {
+      runeId: runeId,
+      amount: runeAmount,
+      output: 1, // Output index 1 (after OP_RETURN at index 0)
+    },
+  ];
+  const runesScriptHex = createTransferScriptHex(transferParams);
+
+  // Create transaction builder
+  const txb = new ZcashTransactionBuilder(ZCASH_NETWORK);
+  txb.setDefaultsForVersion(
+    ZCASH_NETWORK,
+    ZcashTransaction.VERSION4_BRANCH_NU6_1
+  );
+  txb.setExpiryHeight(0);
+
+  // Add rune UTXO as first input (seller's rune)
+  txb.addInput(
+    runeUtxo.txid,
+    runeUtxo.vout,
+    undefined,
+    undefined,
+    runeUtxo.amount
+  );
+
+  // Add buyer's payment UTXOs
+  buyerInputs.forEach((utxo) => {
+    txb.addInput(utxo.txid, utxo.vout, undefined, undefined, utxo.amount);
+  });
+
+  // Add OP_RETURN output with rune transfer data
+  txb.addOutput(Buffer.from(runesScriptHex, 'hex'), 0);
+
+  // Add output 1: Rune to buyer (with inscription size)
+  txb.addOutput(buyerAddress, INSCRIPTION_UTXO_SIZE);
+
+  // Add output 2: Payment to seller
+  txb.addOutput(sellerAddress, priceZatoshis);
+
+  // Add change output if needed
+  if (change > 0) {
+    txb.addOutput(buyerAddress, change);
+  }
+
+  // Sign all inputs
+  const buyerKeyPair = ECPair.fromWIF(buyerPrivateKeyWif);
+
+  // Note: We can't sign the seller's rune input here - that would need seller's signature
+  // For now, this creates the buyer's part. In a real implementation, you'd need
+  // a PSBT-like mechanism or the seller's signature.
+
+  // Sign buyer's payment inputs (starting from index 1, after rune input at index 0)
+  buyerInputs.forEach((utxo, index) => {
+    const inputIndex = 1 + index;
+    txb.sign(
+      inputIndex,
+      buyerKeyPair,
+      undefined,
+      Transaction.SIGHASH_ALL,
+      utxo.amount
+    );
+  });
+
+  const tx = txb.build();
+  return {
+    hex: tx.toHex(),
+    feeUsed: fee,
+  };
+};

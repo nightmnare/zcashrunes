@@ -54,6 +54,12 @@ const Header = () => {
           <Link to='/runes' className={linkClasses('/runes')}>
             Runes
           </Link>
+          <Link
+            to='/runes-trading'
+            className={linkClasses('/runes-trading')}
+          >
+            Runes Trading
+          </Link>
           <Link to='/explorer' className={linkClasses('/explorer')}>
             Explorer
           </Link>
@@ -153,6 +159,13 @@ const Header = () => {
               className={mobileLinkClasses('/runes')}
             >
               ⚡ Runes
+            </button>
+            <button
+              type='button'
+              onClick={() => handleNavClick('/runes-trading')}
+              className={mobileLinkClasses('/runes-trading')}
+            >
+              💱 Runes Trading
             </button>
             <button
               type='button'

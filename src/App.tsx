@@ -4,6 +4,7 @@ import ExplorerPage from './pages/ExplorerPage';
 import MarketplacePage from './pages/MarketplacePage';
 import MintPage from './pages/MintPage';
 import RunesPage from './pages/RunesPage';
+import RunesTradingPage from './pages/RunesTradingPage';
 import TestPage from './pages/TestPage';
 import WalletApp from './WalletApp';
 
@@ -17,6 +18,7 @@ function App() {
             <Route path='/' element={<MintPage />} />
             <Route path='/marketplace' element={<MarketplacePage />} />
             <Route path='/runes' element={<RunesPage />} />
+            <Route path='/runes-trading' element={<RunesTradingPage />} />
             <Route path='/explorer' element={<ExplorerPage />} />
             <Route path='/wallet' element={<WalletApp />} />
             <Route path='/test' element={<TestPage />} />

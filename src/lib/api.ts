@@ -50,6 +50,8 @@ export type RuneMintDto = {
   runeName: string; // Rune name from the rune etch record
   utxo?: string;
   createdAt?: string;
+  price?: number; // Price in ZEC for listing
+  isSale?: boolean; // Whether this rune is listed for sale
 };
 
 export type TransactionHistoryDto = {
@@ -715,4 +717,62 @@ export const getMintsByCollectionId = async (collectionId: string) => {
   });
 
   return mints;
+};
+
+/**
+ * Update Rune mint record (for listing/unlisting)
+ */
+export const updateRuneMint = async (
+  transactionId: string,
+  dto: Partial<RuneMintDto>
+) => {
+  const db = getFirestore(firebaseApp);
+  const docRef = doc(db, 'runesMint', transactionId);
+  await updateDoc(docRef, {
+    ...dto,
+  });
+};
+
+/**
+ * Get all runes listed for sale
+ */
+export const getListedRunes = async (): Promise<RuneMintDto[]> => {
+  const db = getFirestore(firebaseApp);
+  const q = query(
+    collection(db, 'runesMint'),
+    where('isSale', '==', true),
+    limit(1000)
+  );
+  const querySnapshot = await getDocs(q);
+
+  return querySnapshot.docs.map((docSnap) => ({
+    ...docSnap.data(),
+  })) as RuneMintDto[];
+};
+
+/**
+ * Save rune transaction history
+ */
+export type RuneTransactionHistoryDto = {
+  from: string;
+  to: string;
+  runeId: string;
+  runeName: string;
+  amount: string;
+  reason: string;
+  price: number;
+  createdAt?: string;
+  transactionId?: string;
+};
+
+export const saveRuneTransactionHistory = async (
+  dto: RuneTransactionHistoryDto
+) => {
+  const db = getFirestore(firebaseApp);
+  const historyRef = doc(collection(db, 'runeTransactionHistories'));
+  await setDoc(historyRef, {
+    ...dto,
+    createdAt: dto.createdAt || new Date().toISOString(),
+  });
+  return historyRef.id;
 };
