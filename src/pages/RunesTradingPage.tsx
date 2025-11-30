@@ -36,7 +36,7 @@ type View = 'marketplace' | 'my-runes';
 const RunesTradingPage = () => {
   const navigate = useNavigate();
   const [view, setView] = useState<View>('marketplace');
-  const [walletRecord, setWalletRecord] = useState<StoredWalletRecord | null>(
+  const [walletRecord] = useState<StoredWalletRecord | null>(
     () => (typeof window === 'undefined' ? null : loadWalletRecord())
   );
   const [listedRunes, setListedRunes] = useState<RuneMintDto[]>([]);
